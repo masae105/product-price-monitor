@@ -5,6 +5,9 @@ import requests
 
 import psycopg
 
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
+
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -18,6 +21,27 @@ load_dotenv(dotenv_path=".env")
 
 app = Flask(__name__)
 
+SCHEDULER_SERVICE_ACCOUNT = (
+    "cloud-scheduler-runner@project-3df45723-f4b0-4dfb-9ca.iam.gserviceaccount.com"
+)
+
+def verify_scheduler_token():
+    auth_header = request.headers.get("Authorization", "")
+
+    if not auth_header.startswith("Bearer "):
+        return False
+
+    token = auth_header.split("Bearer ", 1)[1]
+
+    try:
+        claims = id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+        )
+    except ValueError:
+        return False
+
+    return claims.get("email") == SCHEDULER_SERVICE_ACCOUNT
 
 def get_db_connection():
     db_host = os.getenv("DB_HOST")
@@ -451,9 +475,14 @@ def run_monitor_now():
 
 @app.route("/api/monitor/run", methods=["POST"])
 def run_monitor_api():
+    if not verify_scheduler_token():
+        return jsonify(status="unauthorized"), 401
+
     result = run_monitored_search()
+
     if result is None:
         return jsonify(status="no_active_keywords")
+
     return jsonify(status="success")
 
 

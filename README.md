@@ -30,8 +30,9 @@ FlaskとPostgreSQLを使用した商品検索・価格監視Webアプリです�
 - トップページの監視ダッシュボード
 - 監視実行履歴の保存・表示
 - Cloud Runでの運用
-- Cloud SQL(PostgreSQL)との接続
+- Cloud SQL（PostgreSQL）との接続
 - Cloud Schedulerによる定期監視
+- OIDC認証による監視APIの保護
 - Cloud Loggingによる監視ログ・エラーログ確認
 
 ## 画面と価格推移
@@ -100,6 +101,7 @@ FlaskとPostgreSQLを使用した商品検索・価格監視Webアプリです�
 - openpyxl
 - requests
 - python-dotenv
+- google-auth
 - Selenium / Chromium
 - Slack Webhook
 - 楽天市場API
@@ -173,12 +175,14 @@ FlaskとPostgreSQLを使用した商品検索・価格監視Webアプリです�
 
 ## 自動監視の流れ
 
-Cloud SchedulerからCloud Runの `/api/monitor/run` へPOSTリクエストを送ると、次の処理が実行されます。
+Cloud SchedulerからCloud Runの `/api/monitor/run` へOIDCトークン付きのPOSTリクエストを送ると、次の処理が実行されます。
 
 ```text
 Cloud Scheduler
-  ↓ POST /api/monitor/run
+  ↓ OIDCトークン付きPOST /api/monitor/run
 Flask / Cloud Run
+  ↓
+OIDCトークンを検証
   ↓
 有効な監視キーワードを取得
   ↓
@@ -193,7 +197,10 @@ Cloud SQLの価格履歴と比較
 monitor_runsへ実行結果を保存
 ```
 
-監視画面からの手動実行も、同じ監視処理を利用します。
+Web画面はデモとして公開したまま、Cloud Schedulerから実行する監視APIのみOIDC認証で保護しています。
+OIDCトークンの検証に失敗した場合は、監視処理を実行せずHTTP 401を返します。
+
+監視画面からの手動実行は、Web画面側の処理から同じ監視ロジックを利用します。
 
 ## プロジェクト構成
 
@@ -218,7 +225,7 @@ templates/
 
 主要ファイル:
 
-- `app.py`: Flaskアプリ、Web画面、検索履歴、監視キーワード、通知設定、監視実行履歴、監視API
+- `app.py`: Flaskアプリ、Web画面、検索履歴、監視キーワード、通知設定、監視実行履歴、監視API、OIDCトークン検証
 - `bot.py`: 楽天検索結果の整形、価格履歴との比較、新商品・値下げ判定、通知処理
 - `rakuten.py`: 楽天市場APIの呼び出しと商品データのDataFrame化
 - `product_history.py`: PostgreSQL接続、最新価格取得、価格履歴保存
@@ -318,6 +325,8 @@ Cloud Runで使用するDB接続情報、楽天API認証情報、Slack Webhook U
 
 Cloud Run環境では `K_SERVICE` を判定してCloud SQL Unixソケットへ接続します。Cloud SQL接続に必要な設定は、Cloud RunとCloud SQLの環境に合わせて行ってください。
 
+Web画面はデモとして公開しています。一方、定期監視用の `/api/monitor/run` はFlask側でOIDCトークンを検証し、Cloud Schedulerからの認証済みリクエストのみ監視処理を実行します。
+
 ## Cloud Scheduler
 
 現在確認されている定期監視の設定は次のとおりです。
@@ -328,8 +337,17 @@ Cloud Run環境では `K_SERVICE` を判定してCloud SQL Unixソケットへ�
 - タイムゾーン: `Asia/Tokyo`
 - HTTPメソッド: `POST`
 - パス: `/api/monitor/run`
+- 認証: OIDC
+- 実行用サービスアカウント: Cloud Scheduler専用サービスアカウント
 
-`/api/monitor/run` は有効な監視キーワードを取得し、通知設定を適用した監視検索を実行します。
+Cloud SchedulerからのリクエストにはOIDCトークンを付与します。
+Flask側ではトークンを検証し、想定したCloud Scheduler専用サービスアカウントからのリクエストであることを確認します。
+
+認証に失敗した場合はHTTP 401を返し、監視処理は実行しません。
+
+`/api/monitor/run` は認証成功後、有効な監視キーワードを取得し、通知設定を適用した監視検索を実行します。
+
+Cloud Schedulerからの実行ではHTTP 200、OIDCトークンなしで直接POSTした場合は `unauthorized` となることを確認しています。
 
 ## ログ
 
@@ -366,5 +384,6 @@ Slack通知の状態は次の3種類です。
 - APIキー、楽天Access Key、DBパスワード、Slack Webhook URLなどの秘密情報をREADMEやソースコードへ記載しないでください。
 - ローカルの秘密情報には `.env` を使用し、GitHubへコミットしないでください。
 - Cloud RunではSecret Managerを利用して秘密情報を環境変数へ渡してください。
-- Cloud Schedulerの認証設定など、コードから確認できない設定は別途確認してください。
+- Cloud Schedulerから監視APIを実行する場合は、OIDC認証と専用サービスアカウントを設定してください。
+- `/api/monitor/run` はOIDCトークンを検証し、未認証のリクエストでは監視処理を実行しません。
 - `schema.sql` 実行時には、接続先データベースと実行権限を確認してください。
