@@ -43,6 +43,31 @@
             background: #eef5fb;
         }
 
+        .global-nav form {
+            display: flex;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            border: 0;
+        }
+
+        .global-nav button {
+            padding: 7px 12px;
+            color: #263238;
+            background: transparent;
+            border: 0;
+            border-radius: 3px;
+            font-family: inherit;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .global-nav button:hover {
+            color: #0d4775;
+            background: #eef5fb;
+        }
+
         main {
             max-width: 560px;
             margin: 0 auto;
@@ -119,6 +144,9 @@
         <a href="{{ url_for('index') }}">商品検索</a>
         <a href="{{ url_for('monitor') }}">監視キーワード</a>
         <a href="{{ url_for('product_history') }}">価格履歴</a>
+        <form method="post" action="{{ url_for('logout') }}">
+            <button type="submit">ログアウト</button>
+        </form>
     </nav>
 
     <main>

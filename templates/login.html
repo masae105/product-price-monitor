@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ログイン | 楽天商品検索ツール</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            display: grid;
+            min-height: 100vh;
+            place-items: center;
+            margin: 0;
+            padding: 24px;
+            color: #334155;
+            background: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        main {
+            width: min(100%, 400px);
+            padding: 28px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+        }
+
+        h1 {
+            margin: 0 0 22px;
+            color: #0f172a;
+            font-size: 24px;
+        }
+
+        form {
+            display: grid;
+            gap: 14px;
+        }
+
+        label {
+            display: grid;
+            gap: 6px;
+            color: #475569;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px 12px;
+            color: #334155;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            font: inherit;
+        }
+
+        input:focus {
+            border-color: #2563eb;
+            outline: 2px solid #bfdbfe;
+        }
+
+        button {
+            margin-top: 4px;
+            padding: 10px 14px;
+            color: #ffffff;
+            background: #1d4ed8;
+            border: 0;
+            border-radius: 4px;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1e40af;
+        }
+
+        .error {
+            margin: 0 0 16px;
+            color: #b91c1c;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>ログイン</h1>
+        {% if message %}
+            <p class="error" role="alert">{{ message }}</p>
+        {% endif %}
+        <form method="post" action="{{ url_for('login') }}">
+            <label for="username">
+                ユーザー名
+                <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    autocomplete="username"
+                    required
+                >
+            </label>
+            <label for="password">
+                パスワード
+                <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                >
+            </label>
+            <button type="submit">ログイン</button>
+        </form>
+    </main>
+</body>
+</html>

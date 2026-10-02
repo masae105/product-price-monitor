@@ -13,13 +13,26 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from werkzeug.security import check_password_hash
 
 from bot import run_search_keywords
 
 load_dotenv(dotenv_path=".env")
 
 app = Flask(__name__)
+secret_key = os.getenv("SECRET_KEY")
+if not secret_key:
+    raise RuntimeError("SECRET_KEY environment variable is required")
+app.config["SECRET_KEY"] = secret_key
 
 SCHEDULER_SERVICE_ACCOUNT = (
     "cloud-scheduler-runner@project-3df45723-f4b0-4dfb-9ca.iam.gserviceaccount.com"
@@ -56,6 +69,53 @@ def get_db_connection():
         host=db_host,
         port=os.getenv("DB_PORT")
     )
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    message = None
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        user = None
+
+        if username and password:
+            conn = get_db_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, password_hash FROM users "
+                        "WHERE username = %s",
+                        (username,),
+                    )
+                    user = cur.fetchone()
+            finally:
+                conn.close()
+
+        if user and check_password_hash(user[1], password):
+            session.clear()
+            session["user_id"] = user[0]
+            return redirect(url_for("index"))
+
+        message = "ユーザー名またはパスワードが違います"
+
+    return render_template("login.html", message=message)
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
+@app.before_request
+def require_login():
+    if request.endpoint in {"login", "static", "run_monitor_api"}:
+        return
+
+    if "user_id" not in session:
+        return redirect(url_for("login"))
 
 
 def get_notification_settings():
