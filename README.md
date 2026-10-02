@@ -27,6 +27,7 @@ FlaskとPostgreSQLを使用した商品検索・価格監視Webアプリです�
 - Slack通知
 - 商品価格履歴の保存
 - 商品別価格推移グラフ（Chart.js）
+- ログイン認証
 - トップページの監視ダッシュボード
 - 監視実行履歴の保存・表示
 - Cloud Runでの運用
@@ -34,6 +35,12 @@ FlaskとPostgreSQLを使用した商品検索・価格監視Webアプリです�
 - Cloud Schedulerによる定期監視
 - OIDC認証による監視APIの保護
 - Cloud Loggingによる監視ログ・エラーログ確認
+
+## ログイン
+
+登録済みユーザーはユーザー名とパスワードでログインします。パスワードはWerkzeugでハッシュ化して保存し、ログイン後はFlaskセッションを使用します。ユーザー登録機能はありません。
+
+公開URLの通常画面とWeb APIはログインが必要です。`/api/monitor/run` はセッション認証の対象外ですが、Cloud Scheduler用のOIDC認証で保護されています。
 
 ## 画面と価格推移
 
@@ -102,7 +109,6 @@ FlaskとPostgreSQLを使用した商品検索・価格監視Webアプリです�
 - requests
 - python-dotenv
 - google-auth
-- Selenium / Chromium
 - Slack Webhook
 - 楽天市場API
 - Google Cloud Run
@@ -115,7 +121,7 @@ FlaskとPostgreSQLを使用した商品検索・価格監視Webアプリです�
 
 ## データベース
 
-初期化用SQLは [schema.sql](schema.sql) にあります。
+基本の5テーブルは [schema.sql](schema.sql)、ログイン認証用の `users` テーブルは [migrations/001_create_users.sql](migrations/001_create_users.sql) で作成します。
 
 ### search_history
 
@@ -152,7 +158,7 @@ FlaskとPostgreSQLを使用した商品検索・価格監視Webアプリです�
 
 - `id`: 自動採番される履歴ID
 - `keyword`: 検索キーワード
-- `item_code`: 楽天商品識別子。コード上では `ASIN` 列の値を使用
+- `item_code`: 楽天APIの商品コード。検索データでは `ASIN` 列名に格納
 - `product_name`: 商品名
 - `price`: 価格
 - `product_url`: 商品URL
@@ -172,6 +178,15 @@ FlaskとPostgreSQLを使用した商品検索・価格監視Webアプリです�
 - `status`: `running`、`success`、`failure` などの実行結果
 - `error_message`: 失敗時のエラー内容
 - `completed_at`: 実行完了日時
+
+### users
+
+ログイン認証用のユーザー情報を保存します。`password_hash` にパスワードのハッシュを保存します。業務データのテーブルとはユーザーIDで紐付けていません。
+
+- `id`: 自動採番されるユーザーID
+- `username`: 一意なユーザー名
+- `password_hash`: パスワードハッシュ
+- `created_at`: 作成日時
 
 ## 自動監視の流れ
 
@@ -197,8 +212,7 @@ Cloud SQLの価格履歴と比較
 monitor_runsへ実行結果を保存
 ```
 
-Web画面はデモとして公開したまま、Cloud Schedulerから実行する監視APIのみOIDC認証で保護しています。
-OIDCトークンの検証に失敗した場合は、監視処理を実行せずHTTP 401を返します。
+`/api/monitor/run` はWebセッション認証を適用せず、OIDCトークンを検証します。検証に失敗した場合は監視処理を実行せずHTTP 401を返します。
 
 監視画面からの手動実行は、Web画面側の処理から同じ監視ロジックを利用します。
 
@@ -210,17 +224,22 @@ bot.py
 rakuten.py
 product_history.py
 slack.py
-schema.sql
 config.py
 filter.py
 excel.py
+schema.sql
+migrations/001_create_users.sql
 Dockerfile
 requirements.txt
-auto_run.py
-run_amazon_search.bat
+rakuten_test.py
 test_price_down.py
 test_notification_settings.py
 templates/
+  login.html
+  index.html
+  monitor.html
+  product_history.html
+  clear_history_confirm.html
 ```
 
 主要ファイル:
@@ -229,15 +248,15 @@ templates/
 - `bot.py`: 楽天検索結果の整形、価格履歴との比較、新商品・値下げ判定、通知処理
 - `rakuten.py`: 楽天市場APIの呼び出しと商品データのDataFrame化
 - `product_history.py`: PostgreSQL接続、最新価格取得、価格履歴保存
-- `slack.py`: Slack Webhookによる通知送信と通知メッセージ作成
-- `schema.sql`: PostgreSQLの5テーブルと通知設定初期データの作成
-- `config.py`: 除外ワード、出力ファイル名、Slack Webhook URLの読み込み
 - `filter.py`: 検索結果のフィルタリング
 - `excel.py`: 検索結果のExcel保存
+- `slack.py`: Slack Webhookによる通知送信と通知メッセージ作成
+- `config.py`: 除外ワード、出力ファイル名、Slack Webhook URLの読み込み
+- `schema.sql`: 基本の5テーブルと通知設定初期データの作成
+- `migrations/001_create_users.sql`: ログイン認証用 `users` テーブルの作成
 - `Dockerfile`: Cloud Run向けコンテナイメージの定義。Gunicornで `app:app` を起動
-- `auto_run.py`: `run_search()` を使う単独検索用の補助スクリプト
-- `run_amazon_search.bat`: Windows環境で `auto_run.py` を実行する補助スクリプト
-- `templates/`: 検索画面、監視画面、検索履歴、商品価格履歴などのHTMLテンプレート
+- `rakuten_test.py`: 楽天APIの接続確認用スクリプト
+- `templates/`: ログイン、検索、監視、価格履歴などのHTMLテンプレート
 - `test_price_down.py`: 新商品と値下げ商品の価格履歴判定をテスト
 - `test_notification_settings.py`: 最低値下げ額・最低値下げ率の通知対象判定をテスト
 
@@ -288,6 +307,7 @@ gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 app:app
 - `DB_USER`
 - `DB_PASSWORD`
 - `DB_PORT`
+- `SECRET_KEY`
 - `RAKUTEN_APPLICATION_ID`
 - `RAKUTEN_ACCESS_KEY`
 - `SLACK_WEBHOOK_URL`
@@ -296,7 +316,12 @@ gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 app:app
 
 ```bash
 psql -f schema.sql
+psql -f migrations/001_create_users.sql
 ```
+
+既存のデータベースでは `schema.sql` を再実行せず、usersテーブルのmigrationのみ適用してください。
+
+`SECRET_KEY` は必須です。未設定の場合、アプリは起動しません。秘密値はREADMEやソースに記載せず、ローカルでは `.env`、Cloud RunではSecret Managerから設定してください。
 
 ## Cloud Run
 
@@ -325,7 +350,7 @@ Cloud Runで使用するDB接続情報、楽天API認証情報、Slack Webhook U
 
 Cloud Run環境では `K_SERVICE` を判定してCloud SQL Unixソケットへ接続します。Cloud SQL接続に必要な設定は、Cloud RunとCloud SQLの環境に合わせて行ってください。
 
-Web画面はデモとして公開しています。一方、定期監視用の `/api/monitor/run` はFlask側でOIDCトークンを検証し、Cloud Schedulerからの認証済みリクエストのみ監視処理を実行します。
+通常のWeb画面はログイン必須です。定期監視用の `/api/monitor/run` はFlaskセッション認証の対象外とし、OIDCトークンを検証してCloud Schedulerからの認証済みリクエストのみ監視処理を実行します。
 
 ## Cloud Scheduler
 

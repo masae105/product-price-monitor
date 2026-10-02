@@ -1,7 +1,6 @@
 Flask
 pandas
 openpyxl
-selenium
 requests
 python-dotenv
 psycopg[binary]
